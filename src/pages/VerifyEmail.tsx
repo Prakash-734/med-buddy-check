@@ -2,16 +2,21 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 const VerifyEmail = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      navigate("/auth");
-    }, 2000);
+    const handleRedirect = async () => {
+      await supabase.auth.signOut();
 
-    return () => clearTimeout(timer); // 
+      setTimeout(() => {
+        navigate("/auth"); // redirect to login manually
+      }, 2000);
+    };
+
+    handleRedirect();
   }, [navigate]);
 
   return (
