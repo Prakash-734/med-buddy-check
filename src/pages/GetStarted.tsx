@@ -10,23 +10,23 @@ const GetStarted = () => {
     {
       icon: <Heart className="w-8 h-8 text-red-500" />,
       title: "Never Miss a Dose",
-      description: "Smart reminders to keep you on track with your medication schedule"
+      description: "Smart reminders to keep you on track with your medication schedule",
     },
     {
       icon: <Shield className="w-8 h-8 text-green-500" />,
       title: "Secure & Private",
-      description: "Your health data is encrypted and stored securely"
+      description: "Your health data is encrypted and stored securely",
     },
     {
       icon: <Clock className="w-8 h-8 text-blue-500" />,
       title: "Track Progress",
-      description: "Monitor your adherence and build healthy habits"
+      description: "Monitor your adherence and build healthy habits",
     },
     {
       icon: <Users className="w-8 h-8 text-purple-500" />,
-      title: "Family Support",
-      description: "Connect with caretakers to share your progress"
-    }
+      title: "Caretaker Support",
+      description: "Share progress with trusted caretakers",
+    },
   ];
 
   return (
@@ -47,14 +47,12 @@ const GetStarted = () => {
           </p>
         </div>
 
-        {/* Features Grid */}
+        {/* Features */}
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
           {features.map((feature, index) => (
             <Card key={index} className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 bg-white/70 backdrop-blur-sm">
               <CardContent className="p-6 text-center">
-                <div className="flex justify-center mb-4">
-                  {feature.icon}
-                </div>
+                <div className="flex justify-center mb-4">{feature.icon}</div>
                 <h3 className="font-semibold text-lg mb-2">{feature.title}</h3>
                 <p className="text-sm text-gray-600">{feature.description}</p>
               </CardContent>
@@ -62,46 +60,28 @@ const GetStarted = () => {
           ))}
         </div>
 
-        {/* Hero Section */}
+        {/* Hero CTA */}
         <div className="text-center">
           <div className="max-w-3xl mx-auto mb-8">
             <h2 className="text-2xl md:text-3xl font-bold text-gray-800 mb-4">
               Ready to transform your medication routine?
             </h2>
             <p className="text-lg text-gray-600 mb-8">
-              Join thousands of users who trust MediCare Companion to help them stay healthy and consistent with their medications.
+              Join users who trust MediCare Companion to stay consistent with their health goals.
             </p>
           </div>
-          
-          <Button 
-            onClick={() => navigate('/auth')}
+
+          <Button
+            onClick={() => navigate("/auth")}
             size="lg"
             className="bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600 text-white font-semibold py-4 px-8 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
           >
             Get Started Now
           </Button>
-          
-          <p className="text-sm text-gray-500 mt-4">
-            Free to use • No credit card required • Secure & private
-          </p>
-        </div>
 
-        {/* Stats Section */}
-        <div className="mt-16 pt-12 border-t border-gray-200">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
-            <div>
-              <div className="text-3xl font-bold text-blue-600">10,000+</div>
-              <div className="text-gray-600">Active Users</div>
-            </div>
-            <div>
-              <div className="text-3xl font-bold text-green-600">95%</div>
-              <div className="text-gray-600">Adherence Rate</div>
-            </div>
-            <div>
-              <div className="text-3xl font-bold text-purple-600">24/7</div>
-              <div className="text-gray-600">Support Available</div>
-            </div>
-          </div>
+          <p className="text-sm text-gray-500 mt-4">
+            Free to use • Secure & private
+          </p>
         </div>
       </div>
     </div>
