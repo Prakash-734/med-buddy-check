@@ -1,13 +1,22 @@
-
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, User, Heart } from "lucide-react";
 
 interface OnboardingProps {
-  onComplete: (userType: "patient" | "caretaker") => void;
+  onComplete?: (userType: "patient" | "caretaker") => void;
 }
 
 const Onboarding = ({ onComplete }: OnboardingProps) => {
+  const navigate = useNavigate();
+
+  const handleSelect = (userType: "patient" | "caretaker") => {
+  localStorage.setItem("userType", userType);
+  onComplete?.(userType);
+  navigate("/dashboard");
+};
+
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 flex items-center justify-center p-6">
       <div className="max-w-4xl w-full">
@@ -24,6 +33,7 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
         </div>
 
         <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+          {/* Patient Card */}
           <Card className="group hover:shadow-xl transition-all duration-300 border-2 hover:border-blue-200 cursor-pointer">
             <CardHeader className="text-center pb-4">
               <div className="w-16 h-16 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:bg-blue-200 transition-colors">
@@ -36,32 +46,21 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
             </CardHeader>
             <CardContent className="space-y-4">
               <ul className="space-y-3 text-sm text-muted-foreground">
-                <li className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-                  Mark medications as taken
-                </li>
-                <li className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-                  Upload proof photos (optional)
-                </li>
-                <li className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-                  View your medication calendar
-                </li>
-                <li className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-                  Large, easy-to-use interface
-                </li>
+                <li className="flex items-center gap-2"><div className="w-2 h-2 bg-blue-400 rounded-full"></div>Mark medications as taken</li>
+                <li className="flex items-center gap-2"><div className="w-2 h-2 bg-blue-400 rounded-full"></div>Upload proof photos (optional)</li>
+                <li className="flex items-center gap-2"><div className="w-2 h-2 bg-blue-400 rounded-full"></div>View your medication calendar</li>
+                <li className="flex items-center gap-2"><div className="w-2 h-2 bg-blue-400 rounded-full"></div>Large, easy-to-use interface</li>
               </ul>
-              <Button 
+              <Button
                 className="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white py-3 text-lg"
-                onClick={() => onComplete("patient")}
+                onClick={() => handleSelect("patient")}
               >
                 Continue as Patient
               </Button>
             </CardContent>
           </Card>
 
+          {/* Caretaker Card */}
           <Card className="group hover:shadow-xl transition-all duration-300 border-2 hover:border-green-200 cursor-pointer">
             <CardHeader className="text-center pb-4">
               <div className="w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:bg-green-200 transition-colors">
@@ -74,26 +73,14 @@ const Onboarding = ({ onComplete }: OnboardingProps) => {
             </CardHeader>
             <CardContent className="space-y-4">
               <ul className="space-y-3 text-sm text-muted-foreground">
-                <li className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                  Monitor medication compliance
-                </li>
-                <li className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                  Set up notification preferences
-                </li>
-                <li className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                  View detailed reports
-                </li>
-                <li className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                  Receive email alerts
-                </li>
+                <li className="flex items-center gap-2"><div className="w-2 h-2 bg-green-400 rounded-full"></div>Monitor medication compliance</li>
+                <li className="flex items-center gap-2"><div className="w-2 h-2 bg-green-400 rounded-full"></div>Set up notification preferences</li>
+                <li className="flex items-center gap-2"><div className="w-2 h-2 bg-green-400 rounded-full"></div>View detailed reports</li>
+                <li className="flex items-center gap-2"><div className="w-2 h-2 bg-green-400 rounded-full"></div>Receive email alerts</li>
               </ul>
-              <Button 
+              <Button
                 className="w-full mt-6 bg-green-600 hover:bg-green-700 text-white py-3 text-lg"
-                onClick={() => onComplete("caretaker")}
+                onClick={() => handleSelect("caretaker")}
               >
                 Continue as Caretaker
               </Button>
