@@ -15,6 +15,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
 import VerifyEmail from "./pages/VerifyEmail";
+import ResetPassword from "./pages/ResetPassword";
 
 const queryClient = new QueryClient();
 
@@ -75,8 +76,12 @@ const App = () => {
             />
             <Route path="/verify-email" element={<VerifyEmail />} />
 
+            <Route path="/reset-password" element={<ResetPassword />} />
+
 
             <Route path="*" element={<NotFound />} />
+
+
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
