@@ -5,7 +5,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -239,7 +239,11 @@ const CaretakerDashboard = () => {
                     <DialogContent>
                       <DialogHeader>
   <DialogTitle>{editingMedication ? "Edit Medication" : "Add New Medication"}</DialogTitle>
+  <DialogDescription>
+    Fill out the form below to {editingMedication ? "update" : "create"} a medication.
+  </DialogDescription>
 </DialogHeader>
+
 
 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
   <div>
