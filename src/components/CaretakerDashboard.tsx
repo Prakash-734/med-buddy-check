@@ -1,598 +1,408 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import {
+  Card, CardHeader, CardTitle, CardContent
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
 import { Calendar } from "@/components/ui/calendar";
-import { Users, Bell, Calendar as CalendarIcon, Mail, AlertTriangle, Check, Clock, Camera, Activity } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  medicationSchema,
+  MedicationSchema,
+} from "@/lib/validation/medicationSchema";
+import { toast } from "sonner";
+import {
+  Users, Bell, Pencil, Trash2, Plus, Check, Eye
+} from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-// Mock real-time data store (in a real app, this would be a database/API)
-const mockDataStore = {
-  patientData: {
-    name: "Eleanor Thompson",
-    id: "patient_001",
-    medications: [
-      { id: "med_1", name: "Morning Pills", scheduledTime: "08:00", taken: false, takenTime: null, hasPhoto: false }
-    ],
-    adherenceHistory: new Map(),
-    lastUpdate: new Date().toISOString(),
-    isOnline: true
-  },
-  
-  // Simulate patient taking medication
-  simulatePatientAction: function(action) {
-    const today = new Date().toISOString().split('T')[0];
-    const now = new Date();
-    
-    if (action === 'take_medication') {
-      this.patientData.medications[0].taken = true;
-      this.patientData.medications[0].takenTime = now.toLocaleTimeString();
-      this.patientData.medications[0].hasPhoto = Math.random() > 0.5; // Random photo
-      this.patientData.adherenceHistory.set(today, {
-        taken: true,
-        time: now.toLocaleTimeString(),
-        hasPhoto: this.patientData.medications[0].hasPhoto
-      });
-    } else if (action === 'miss_medication') {
-      this.patientData.medications[0].taken = false;
-      this.patientData.medications[0].takenTime = null;
-      this.patientData.adherenceHistory.set(today, {
-        taken: false,
-        time: null,
-        hasPhoto: false
-      });
-    }
-    
-    this.patientData.lastUpdate = now.toISOString();
-    
-    // Notify all listeners
-    this.listeners.forEach(callback => callback(this.patientData));
-  },
-  
-  listeners: [],
-  
-  subscribe: function(callback) {
-    this.listeners.push(callback);
-    return () => {
-      this.listeners = this.listeners.filter(cb => cb !== callback);
-    };
-  }
-};
-
-// Initialize some mock history data
-const initializeMockData = () => {
-  const today = new Date();
-  for (let i = 1; i <= 7; i++) {
-    const date = new Date(today);
-    date.setDate(today.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
-    const wasTaken = Math.random() > 0.3; // 70% adherence rate
-    
-    mockDataStore.patientData.adherenceHistory.set(dateStr, {
-      taken: wasTaken,
-      time: wasTaken ? "8:30 AM" : null,
-      hasPhoto: wasTaken ? Math.random() > 0.5 : false
-    });
-  }
-};
-
-initializeMockData();
+import { format } from "date-fns";
+import type { MedicationWithLogs, CreateMedicationInput } from "@/lib/supabase";
+import { MedicationService } from "@/lib/medicationService";
 
 const CaretakerDashboard = () => {
-  const [activeTab, setActiveTab] = useState("overview");
+  const [medications, setMedications] = useState<MedicationWithLogs[]>([]);
+  const [editingMedication, setEditingMedication] = useState<MedicationWithLogs | null>(null);
+  const [viewingMedication, setViewingMedication] = useState<MedicationWithLogs | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [seenLogIds, setSeenLogIds] = useState<Set<string>>(new Set());
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [patientData, setPatientData] = useState(mockDataStore.patientData);
-  const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
-  const [notifications, setNotifications] = useState([]);
+  const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
+  const [activeTab, setActiveTab] = useState("overview");
 
-  // Real-time updates subscription
-  useEffect(() => {
-    const unsubscribe = mockDataStore.subscribe((updatedData) => {
-      setPatientData({ ...updatedData });
+  const [adherenceData, setAdherenceData] = useState({
+    adherenceRate: 0,
+    currentStreak: 0,
+    missedDays: 0,
+    takenDays: 0,
+  });
+
+  const form = useForm<MedicationSchema>({
+    resolver: zodResolver(medicationSchema),
+    defaultValues: { name: "", dosage: "", frequency: "", instructions: "" },
+  });
+
+  const loadData = async () => {
+    try {
+      const meds = await MedicationService.getMedications();
+      setMedications(meds);
       setLastUpdateTime(new Date());
-      
-      // Add notification for medication taken
-      if (updatedData.medications[0].taken) {
-        setNotifications(prev => [
-          {
-            id: Date.now(),
-            type: 'success',
-            message: `${updatedData.name} took their medication at ${updatedData.medications[0].takenTime}`,
-            timestamp: new Date()
-          },
-          ...prev.slice(0, 4) // Keep only last 5 notifications
-        ]);
+
+      const todayStr = format(new Date(), "yyyy-MM-dd");
+      const newNotifications: any[] = [];
+
+      meds.forEach(med => {
+        const log = med.medication_logs.find(log => log.date_taken === todayStr);
+        if (log && !seenLogIds.has(log.id)) {
+          newNotifications.push({
+            id: log.id,
+            type: "success",
+            message: `${med.name} taken at ${new Date(log.created_at).toLocaleTimeString()}`,
+            timestamp: new Date(log.created_at),
+          });
+          seenLogIds.add(log.id);
+        }
+      });
+
+      if (newNotifications.length > 0) {
+        setNotifications(prev => [...newNotifications, ...prev].slice(0, 5));
+        setSeenLogIds(new Set(seenLogIds));
       }
-    });
+    } catch (err) {
+      toast.error("Failed to load medications");
+    }
+  };
 
-    return unsubscribe;
-  }, []);
-
-  // Simulate real-time updates every 30 seconds
   useEffect(() => {
-    const interval = setInterval(() => {
-      // Simulate patient status changes
-      const random = Math.random();
-      if (random < 0.1) { // 10% chance of taking medication
-        mockDataStore.simulatePatientAction('take_medication');
-      }
-      
-      // Update online status randomly
-      mockDataStore.patientData.isOnline = Math.random() > 0.1; // 90% online
-      setPatientData({ ...mockDataStore.patientData });
-    }, 30000);
-
+    loadData();
+    const interval = setInterval(loadData, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  // Calculate adherence metrics
-  const calculateAdherenceMetrics = () => {
-    const history = Array.from(patientData.adherenceHistory.values());
-    const totalDays = history.length;
-    const takenDays = history.filter(day => day.taken).length;
-    const adherenceRate = totalDays > 0 ? Math.round((takenDays / totalDays) * 100) : 0;
-    
-    // Calculate current streak
-    let currentStreak = 0;
-    const sortedDates = Array.from(patientData.adherenceHistory.keys()).sort().reverse();
-    
-    for (const date of sortedDates) {
-      if (patientData.adherenceHistory.get(date)?.taken) {
-        currentStreak++;
-      } else {
-        break;
+  useEffect(() => {
+  if (medications.length === 0) {
+    setAdherenceData({
+      adherenceRate: 0,
+      currentStreak: 0,
+      missedDays: 0,
+      takenDays: 0,
+    });
+    return;
+  }
+
+  const today = new Date();
+  let totalDoses = 0;
+  let takenDoses = 0;
+  let streak = 0;
+
+  const allDates = new Set<string>();
+
+  medications.forEach((med) => {
+    const freq = med.frequency.toLowerCase();
+    const perDay = freq.includes("four") ? 4 : freq.includes("three") ? 3 : freq.includes("twice") ? 2 : 1;
+    const createdDate = new Date(med.created_at);
+    const daysSince = Math.floor((today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+    for (let i = 0; i < daysSince; i++) {
+      const date = new Date(createdDate);
+      date.setDate(date.getDate() + i);
+      const dateStr = format(date, "yyyy-MM-dd");
+      allDates.add(dateStr);
+      totalDoses += perDay;
+
+      const taken = med.medication_logs.some(log => log.date_taken === dateStr);
+      if (taken) {
+        takenDoses += perDay;
       }
     }
+  });
 
-    return {
-      adherenceRate,
-      currentStreak,
-      totalDays,
-      takenDays,
-      missedDays: totalDays - takenDays
-    };
+  // Streak: count how many previous days had logs from most recent to past
+  const sortedDates = Array.from(allDates).sort((a, b) => b.localeCompare(a));
+  for (const dateStr of sortedDates) {
+    const dayTaken = medications.some(med => med.medication_logs.some(log => log.date_taken === dateStr));
+    if (dayTaken) streak++;
+    else break;
+  }
+
+  const adherenceRate = totalDoses > 0 ? Math.round((takenDoses / totalDoses) * 100) : 0;
+
+  setAdherenceData({
+    adherenceRate,
+    takenDays: takenDoses,
+    missedDays: totalDoses - takenDoses,
+    currentStreak: streak,
+  });
+}, [medications]);
+
+  const onSubmit = async (data: MedicationSchema) => {
+    try {
+      const payload: CreateMedicationInput = {
+        name: data.name,
+        dosage: data.dosage,
+        frequency: data.frequency,
+        instructions: data.instructions ?? "",
+      };
+
+      if (editingMedication) {
+        await MedicationService.updateMedication(editingMedication.id, payload);
+        toast.success("Medication updated");
+      } else {
+        await MedicationService.createMedication(payload);
+        toast.success("Medication created");
+      }
+
+      form.reset();
+      setDialogOpen(false);
+      setEditingMedication(null);
+      loadData();
+    } catch {
+      toast.error("Error saving medication");
+    }
   };
 
-  const metrics = calculateAdherenceMetrics();
-
-  // Get recent activity
-  const getRecentActivity = () => {
-    const sortedEntries = Array.from(patientData.adherenceHistory.entries())
-      .sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime())
-      .slice(0, 5);
-
-    return sortedEntries.map(([date, data]) => ({
-      date,
-      taken: data.taken,
-      time: data.time,
-      hasPhoto: data.hasPhoto
-    }));
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this medication?")) return;
+    try {
+      await MedicationService.deleteMedication(id);
+      toast.success("Medication deleted");
+      loadData();
+    } catch {
+      toast.error("Error deleting");
+    }
   };
-
-  const recentActivity = getRecentActivity();
-
-  // Handle actions
-  const handleSendReminderEmail = () => {
-    setNotifications(prev => [
-      {
-        id: Date.now(),
-        type: 'info',
-        message: `Reminder email sent to ${patientData.name}`,
-        timestamp: new Date()
-      },
-      ...prev.slice(0, 4)
-    ]);
-  };
-
-  const handleManualUpdate = () => {
-    // Simulate forcing a data refresh
-    mockDataStore.patientData.lastUpdate = new Date().toISOString();
-    setPatientData({ ...mockDataStore.patientData });
-    setLastUpdateTime(new Date());
-  };
-
-  // Simulate patient actions (for demo purposes)
-  const simulateTakeMedication = () => {
-    mockDataStore.simulatePatientAction('take_medication');
-  };
-
-  const simulateMissMedication = () => {
-    mockDataStore.simulatePatientAction('miss_medication');
-  };
-
-  const today = new Date().toISOString().split('T')[0];
-  const todayStatus = patientData.adherenceHistory.get(today) || { taken: false };
 
   return (
     <div className="space-y-6">
-      {/* Header Section */}
+      {/* Header */}
       <div className="bg-gradient-to-r from-green-500 to-blue-500 rounded-2xl p-8 text-white">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex justify-between mb-6">
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center">
               <Users className="w-8 h-8" />
             </div>
             <div>
               <h2 className="text-3xl font-bold">Caretaker Dashboard</h2>
-              <p className="text-white/90 text-lg">Monitoring {patientData.name}'s medication adherence</p>
+              <p className="text-white/90 text-lg">Monitoring medication adherence</p>
             </div>
           </div>
-          
-          <div className="flex items-center gap-4">
+          <div className="text-sm">
             <div className="flex items-center gap-2">
-              <div className={`w-3 h-3 rounded-full ${patientData.isOnline ? 'bg-green-400' : 'bg-red-400'}`}></div>
-              <span className="text-sm">{patientData.isOnline ? 'Online' : 'Offline'}</span>
+              <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+              Online
             </div>
-            <div className="text-sm">
-              Last update: {lastUpdateTime.toLocaleTimeString()}
-            </div>
+            <div>Last update: {lastUpdateTime?.toLocaleTimeString()}</div>
           </div>
         </div>
-        
+
+        {/* Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
-            <div className="text-2xl font-bold">{metrics.adherenceRate}%</div>
-            <div className="text-white/80">Adherence Rate</div>
-          </div>
-          <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
-            <div className="text-2xl font-bold">{metrics.currentStreak}</div>
-            <div className="text-white/80">Current Streak</div>
-          </div>
-          <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
-            <div className="text-2xl font-bold">{metrics.missedDays}</div>
-            <div className="text-white/80">Missed Recently</div>
-          </div>
-          <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
-            <div className="text-2xl font-bold">{metrics.takenDays}</div>
-            <div className="text-white/80">Taken Recently</div>
-          </div>
+          <MetricCard label="Adherence Rate" value={`${adherenceData.adherenceRate}%`} />
+          <MetricCard label="Current Streak" value={adherenceData.currentStreak} />
+          <MetricCard label="Missed Recently" value={adherenceData.missedDays} />
+          <MetricCard label="Taken Recently" value={adherenceData.takenDays} />
         </div>
       </div>
 
-      {/* Real-time Notifications */}
-      {notifications.length > 0 && (
-        <Card className="border-blue-200 bg-blue-50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bell className="w-5 h-5 text-blue-600" />
-              Recent Updates
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {notifications.slice(0, 3).map((notification) => (
-                <div key={notification.id} className="flex items-center gap-3 p-2 bg-white rounded-lg">
-                  <div className={`w-2 h-2 rounded-full ${
-                    notification.type === 'success' ? 'bg-green-500' : 'bg-blue-500'
-                  }`}></div>
-                  <span className="text-sm">{notification.message}</span>
-                  <span className="text-xs text-gray-500 ml-auto">
-                    {notification.timestamp.toLocaleTimeString()}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Main Content Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="w-full grid grid-cols-2 mb-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="activity">Recent Activity</TabsTrigger>
-          <TabsTrigger value="calendar">Calendar View</TabsTrigger>
-          <TabsTrigger value="controls">Controls</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid lg:grid-cols-2 gap-6">
-            {/* Today's Status */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CalendarIcon className="w-5 h-5 text-blue-600" />
-                  Today's Status
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
-                  <div>
-                    <h4 className="font-medium">{patientData.medications[0].name}</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Scheduled: {patientData.medications[0].scheduledTime}
-                    </p>
-                    {todayStatus.taken && (
-                      <p className="text-sm text-green-600">
-                        Taken: {todayStatus.time}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {todayStatus.hasPhoto && (
-                      <Badge variant="outline">
-                        <Camera className="w-3 h-3 mr-1" />
-                        Photo
-                      </Badge>
-                    )}
-                    <Badge variant={todayStatus.taken ? "secondary" : "destructive"}>
-                      {todayStatus.taken ? "Completed" : "Pending"}
-                    </Badge>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+        {/* Overview Tab */}
+        <TabsContent value="overview">
+          <div className="flex flex-col md:flex-row gap-6">
+            <div className="flex-1 space-y-4">
+              <Card>
+                <CardHeader className="flex justify-between items-center">
+                  <CardTitle>Medications</CardTitle>
+                  <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button onClick={() => { setEditingMedication(null); form.reset(); }}>
+                        <Plus className="w-4 h-4 mr-2" /> Add Medication
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+  <DialogTitle>{editingMedication ? "Edit Medication" : "Add New Medication"}</DialogTitle>
+</DialogHeader>
 
-            {/* Quick Actions */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Quick Actions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Button 
-                  className="w-full justify-start" 
-                  variant="outline"
-                  onClick={handleSendReminderEmail}
-                >
-                  <Mail className="w-4 h-4 mr-2" />
-                  Send Reminder Email
-                </Button>
-                <Button 
-                  className="w-full justify-start" 
-                  variant="outline"
-                  onClick={handleManualUpdate}
-                >
-                  <Activity className="w-4 h-4 mr-2" />
-                  Refresh Data
-                </Button>
-                <Button 
-                  className="w-full justify-start" 
-                  variant="outline"
-                  onClick={() => setActiveTab("calendar")}
-                >
-                  <CalendarIcon className="w-4 h-4 mr-2" />
-                  View Full Calendar
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
+<form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+  <div>
+    <label className="text-sm font-medium">Medication Name</label>
+    <Input placeholder="Enter medication name" {...form.register("name")} required />
+  </div>
 
-          {/* Adherence Progress */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Adherence Progress</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex justify-between text-sm">
-                  <span>Overall Progress</span>
-                  <span>{metrics.adherenceRate}%</span>
-                </div>
-                <Progress value={metrics.adherenceRate} className="h-3" />
-                <div className="grid grid-cols-3 gap-4 text-center text-sm">
-                  <div>
-                    <div className="font-medium text-green-600">{metrics.takenDays} days</div>
-                    <div className="text-muted-foreground">Taken</div>
-                  </div>
-                  <div>
-                    <div className="font-medium text-red-600">{metrics.missedDays} days</div>
-                    <div className="text-muted-foreground">Missed</div>
-                  </div>
-                  <div>
-                    <div className="font-medium text-blue-600">{metrics.currentStreak} days</div>
-                    <div className="text-muted-foreground">Current Streak</div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+  <div>
+    <label className="text-sm font-medium">Dosage</label>
+    <Input placeholder="e.g., 1 tablet, 10mg" {...form.register("dosage")} required />
+  </div>
 
-        <TabsContent value="activity" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Medication Activity</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {recentActivity.map((activity, index) => (
-                  <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                        activity.taken ? 'bg-green-100' : 'bg-red-100'
-                      }`}>
-                        {activity.taken ? (
-                          <Check className="w-5 h-5 text-green-600" />
-                        ) : (
-                          <AlertTriangle className="w-5 h-5 text-red-600" />
-                        )}
-                      </div>
+  <div>
+    <label className="text-sm font-medium">Frequency</label>
+    <Select
+      onValueChange={(value) => form.setValue("frequency", value)}
+      value={form.watch("frequency")}
+    >
+      <SelectTrigger>
+        <SelectValue placeholder="Select frequency" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="once daily">Once daily</SelectItem>
+        <SelectItem value="twice daily">Twice daily</SelectItem>
+        <SelectItem value="three times a day">Three times a day</SelectItem>
+        <SelectItem value="four times a day">Four times a day</SelectItem>
+      </SelectContent>
+    </Select>
+  </div>
+
+  <div>
+    <label className="text-sm font-medium">Description (Optional)</label>
+    <Input placeholder="Additional notes about the medication" {...form.register("instructions")} />
+  </div>
+
+  <div className="flex justify-end gap-2 pt-2">
+    <Button variant="outline" type="button" onClick={() => setDialogOpen(false)}>Cancel</Button>
+    <Button type="submit">{editingMedication ? "Update" : "Add Medication"}</Button>
+  </div>
+</form>
+
+                    </DialogContent>
+                  </Dialog>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {medications.map(med => (
+                    <div key={med.id} className="border rounded-lg p-3 flex justify-between items-center">
                       <div>
-                        <p className="font-medium">
-                          {new Date(activity.date).toLocaleDateString('en-US', { 
-                            weekday: 'long', 
-                            month: 'long', 
-                            day: 'numeric' 
-                          })}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {activity.taken ? `Taken at ${activity.time}` : 'Medication missed'}
-                        </p>
+                        <div className="font-semibold">{med.name}</div>
+                        <div className="text-sm text-muted-foreground">{med.dosage} • {med.frequency}</div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="ghost" onClick={() => setViewingMedication(med)}>
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => { setEditingMedication(med); setDialogOpen(true); form.reset(med); }}>
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button size="sm" variant="destructive" onClick={() => handleDelete(med.id)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {activity.hasPhoto && (
-                        <Badge variant="outline">
-                          <Camera className="w-3 h-3 mr-1" />
-                          Photo
-                        </Badge>
-                      )}
-                      <Badge variant={activity.taken ? "secondary" : "destructive"}>
-                        {activity.taken ? "Completed" : "Missed"}
-                      </Badge>
-                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="w-full md:w-80">
+              <Card className="sticky top-4">
+                <CardHeader>
+                  <CardTitle>Calendar</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Calendar mode="single" selected={selectedDate} onSelect={(d) => d && setSelectedDate(d)} />
+                  <div className="mt-4 text-xs">
+                    <h4 className="font-semibold text-sm">{format(selectedDate, "MMMM d, yyyy")}</h4>
+                    {medications.map(med => {
+                      const dateStr = format(selectedDate, "yyyy-MM-dd");
+                      const log = med.medication_logs.find(log => log.date_taken === dateStr);
+                      return (
+                        <div key={med.id} className="mt-3 border-b pb-3">
+                          <div className="flex justify-between items-center">
+                            <span className={`font-medium ${log ? "text-green-600" : "text-muted-foreground"}`}>
+                              {med.name}
+                            </span>
+                            {log && <Check className="w-4 h-4 text-green-600" />}
+                          </div>
+                          {log?.image_url && (
+                            <img src={log.image_url} alt="Proof" className="mt-2 w-32 rounded border" />
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </TabsContent>
 
-        <TabsContent value="calendar" className="space-y-6">
-          <Card>
+        {/* Activity Tab */}
+        <TabsContent value="activity">
+          <Card className="border-blue-200 bg-blue-50">
             <CardHeader>
-              <CardTitle>Medication Calendar Overview</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="w-5 h-5 text-blue-600" /> Recent Updates
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid lg:grid-cols-2 gap-6">
-                <div>
-                  <Calendar
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={(date) => date && setSelectedDate(date)}
-                    className="w-full"
-                  />
-                  
-                  <div className="mt-4 space-y-2 text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                      <span>Medication taken</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-red-400 rounded-full"></div>
-                      <span>Missed medication</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                      <span>Today</span>
-                    </div>
-                  </div>
+            <CardContent className="space-y-2">
+              {notifications.length === 0 && (
+                <p className="text-sm text-muted-foreground">No recent activity yet.</p>
+              )}
+              {notifications.map(n => (
+                <div key={n.id} className="flex items-center gap-2 text-sm">
+                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                  {n.message}
+                  <span className="text-xs text-gray-500 ml-auto">{n.timestamp.toLocaleTimeString()}</span>
                 </div>
-
-                <div>
-                  <h4 className="font-medium mb-4">
-                    Details for {selectedDate.toLocaleDateString()}
-                  </h4>
-                  
-                  <div className="space-y-4">
-                    {(() => {
-                      const dateStr = selectedDate.toISOString().split('T')[0];
-                      const dayData = patientData.adherenceHistory.get(dateStr);
-                      const isToday = dateStr === today;
-                      const isPast = new Date(dateStr) < new Date(today);
-                      
-                      if (dayData?.taken) {
-                        return (
-                          <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                            <div className="flex items-center gap-2 mb-2">
-                              <Check className="w-5 h-5 text-green-600" />
-                              <span className="font-medium text-green-800">Medication Taken</span>
-                            </div>
-                            <p className="text-sm text-green-700">
-                              {patientData.name} took their medication at {dayData.time}
-                            </p>
-                            {dayData.hasPhoto && (
-                              <Badge variant="outline" className="mt-2">
-                                <Camera className="w-3 h-3 mr-1" />
-                                Photo verification available
-                              </Badge>
-                            )}
-                          </div>
-                        );
-                      } else if (dayData && !dayData.taken) {
-                        return (
-                          <div className="p-4 bg-red-50 rounded-lg border border-red-200">
-                            <div className="flex items-center gap-2 mb-2">
-                              <AlertTriangle className="w-5 h-5 text-red-600" />
-                              <span className="font-medium text-red-800">Medication Missed</span>
-                            </div>
-                            <p className="text-sm text-red-700">
-                              {patientData.name} did not take their medication on this day.
-                            </p>
-                          </div>
-                        );
-                      } else if (isToday) {
-                        return (
-                          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                            <div className="flex items-center gap-2 mb-2">
-                              <Clock className="w-5 h-5 text-blue-600" />
-                              <span className="font-medium text-blue-800">Today - Pending</span>
-                            </div>
-                            <p className="text-sm text-blue-700">
-                              Waiting for {patientData.name} to take their medication.
-                            </p>
-                          </div>
-                        );
-                      } else {
-                        return (
-                          <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                            <div className="flex items-center gap-2 mb-2">
-                              <CalendarIcon className="w-5 h-5 text-gray-600" />
-                              <span className="font-medium text-gray-800">
-                                {isPast ? 'No Data' : 'Future Date'}
-                              </span>
-                            </div>
-                            <p className="text-sm text-gray-700">
-                              {isPast ? 'No medication data available for this date.' : 'This date is in the future.'}
-                            </p>
-                          </div>
-                        );
-                      }
-                    })()}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="controls" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Demo Controls</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Use these controls to simulate patient actions and see real-time updates:
-              </p>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Button 
-                  onClick={simulateTakeMedication}
-                  className="w-full"
-                  variant="outline"
-                >
-                  <Check className="w-4 h-4 mr-2" />
-                  Simulate: Take Medication
-                </Button>
-                
-                <Button 
-                  onClick={simulateMissMedication}
-                  className="w-full"
-                  variant="outline"
-                >
-                  <AlertTriangle className="w-4 h-4 mr-2" />
-                  Simulate: Miss Medication
-                </Button>
-              </div>
-              
-              <div className="mt-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                <h4 className="font-medium text-yellow-800 mb-2">Real-time Features:</h4>
-                <ul className="text-sm text-yellow-700 space-y-1">
-                  <li>• Automatic updates every 30 seconds</li>
-                  <li>• Real-time adherence calculations</li>
-                  <li>• Live notification system</li>
-                  <li>• Patient online/offline status</li>
-                  <li>• Instant calendar updates</li>
-                </ul>
-              </div>
+              ))}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Eye Dialog */}
+      {viewingMedication && (
+        <Dialog open={!!viewingMedication} onOpenChange={() => setViewingMedication(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Logs for: {viewingMedication.name}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 max-h-80 overflow-y-auto">
+              {viewingMedication.medication_logs.length === 0 && (
+                <p className="text-muted-foreground text-sm">No logs available.</p>
+              )}
+              {viewingMedication.medication_logs
+                .sort((a, b) => b.created_at.localeCompare(a.created_at))
+                .map(log => (
+                  <div key={log.id} className="border rounded p-2 space-y-1">
+                    <div className="text-sm font-medium">
+                      📅 {format(new Date(log.date_taken), "PP")} at {new Date(log.created_at).toLocaleTimeString()}
+                    </div>
+                    {log.image_url ? (
+                      <img src={log.image_url} alt="Proof" className="w-32 rounded border" />
+                    ) : (
+                      <div className="text-xs text-muted-foreground">No image uploaded.</div>
+                    )}
+                  </div>
+                ))}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 };
+
+const MetricCard = ({ label, value }: { label: string; value: string | number }) => (
+  <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm text-white">
+    <div className="text-2xl font-bold">{value}</div>
+    <div className="text-white/80">{label}</div>
+  </div>
+);
 
 export default CaretakerDashboard;
