@@ -398,7 +398,7 @@ const CaretakerDashboard = () => {
                         <div>
                           <label className="text-sm font-medium">Dosage</label>
                           <Input
-                            placeholder="e.g., 1 tablet, 10mg"
+                            placeholder="e.g., 1 tablet, 100mg"
                             {...form.register("dosage")}
                             required
                           />
