@@ -26,6 +26,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandEmpty,
+} from "@/components/ui/command";
+
 
 import { format } from "date-fns";
 import type { MedicationWithLogs, CreateMedicationInput } from "@/lib/supabase";
@@ -184,6 +197,15 @@ const CaretakerDashboard = () => {
     }
   };
 
+const [searchQuery, setSearchQuery] = useState("");
+const [open, setOpen] = useState(false);
+
+const [suggestedMeds, setSuggestedMeds] = useState([
+  "Paracetamol", "Aspirin", "Metformin", "Ibuprofen", "Atorvastatin"
+]);
+
+
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -232,9 +254,18 @@ const CaretakerDashboard = () => {
                   <CardTitle>Medications</CardTitle>
                   <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                     <DialogTrigger asChild>
-                      <Button onClick={() => { setEditingMedication(null); form.reset(); }}>
-                        <Plus className="w-4 h-4 mr-2" /> Add Medication
-                      </Button>
+                     <Button
+  onClick={() => {
+    setEditingMedication(null);
+    form.reset();
+    setSearchQuery("");
+    setDialogOpen(true);       // Open the dialog
+    setTimeout(() => setOpen(true), 100); // ⬅ Show suggestions shortly after dialog open
+  }}
+>
+  <Plus className="w-4 h-4 mr-2" /> Add Medication
+</Button>
+
                     </DialogTrigger>
                     <DialogContent>
                       <DialogHeader>
@@ -246,14 +277,124 @@ const CaretakerDashboard = () => {
 
 
 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-  <div>
+    <div>
     <label className="text-sm font-medium">Medication Name</label>
-    <Input placeholder="Enter medication name" {...form.register("name")} required />
+<Popover open={open} onOpenChange={setOpen}>
+  <PopoverTrigger asChild>
+    <div className="relative">
+      <Input
+        placeholder="Search or enter medication"
+        value={form.watch("name")}
+        onChange={(e) => {
+          form.setValue("name", e.target.value);
+          setSearchQuery(e.target.value);
+        }}
+        {...form.register("name", { required: "Medication name is required" })}
+        className="pr-8"
+      />
+      <button
+  type="button"
+  onClick={() => {
+    const cleaned = searchQuery.trim().replace(/^\+/, "");
+    if (cleaned && !suggestedMeds.some(m => m.toLowerCase() === cleaned.toLowerCase())) {
+      setSuggestedMeds((prev) => [...prev, cleaned]);
+    }
+    form.setValue("name", cleaned);
+    setSearchQuery(cleaned);
+    setOpen(false);
+  }}
+  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-green-600 hover:text-green-800"
+  title="Add custom medication"
+>
+  <Plus className="w-4 h-4" />
+</button>
+
+    </div>
+  </PopoverTrigger>
+  <PopoverContent className="w-full p-0">
+    <Command>
+      <CommandInput
+        placeholder="Search medications..."
+        value={searchQuery}
+onValueChange={(val) => setSearchQuery(val.replace(/^\+/, ""))}
+
+      />
+      <CommandList>
+  {searchQuery.trim() !== "" &&
+    !suggestedMeds.some(med => med.toLowerCase() === searchQuery.trim().toLowerCase()) && (
+      <div className="px-2 py-2 text-sm text-muted-foreground">
+        <span>No exact match. </span>
+        <button
+          type="button"
+          className="text-blue-600 underline ml-1"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            const trimmed = searchQuery.trim();
+            const cleaned = trimmed.replace(/^\+/, "");
+if (cleaned && !suggestedMeds.some(m => m.toLowerCase() === cleaned.toLowerCase())) {
+  setSuggestedMeds((prev) => [...prev, cleaned]);
+}
+form.setValue("name", cleaned);
+setSearchQuery(cleaned);
+
+            setSearchQuery(trimmed);
+            setOpen(false);
+          }}
+        >
+          Add "{searchQuery.trim()}" as custom
+        </button>
+      </div>
+    )}
+
+  {suggestedMeds
+    .filter((med) =>
+      med.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .map((med) => (
+      <div
+  key={med}
+  onClick={() => {
+    form.setValue("name", med);
+    setSearchQuery(med);
+    setOpen(false);
+  }}
+  className="flex justify-between items-center px-3 py-2 hover:bg-muted text-sm cursor-pointer"
+>
+  <span className="truncate">{med}</span>
+  <button
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation(); // ⬅ prevent the parent click
+      if (confirm(`Delete "${med}" from suggestions?`)) {
+        setSuggestedMeds((prev) => prev.filter((item) => item !== med));
+      }
+    }}
+    className="text-muted-foreground hover:text-red-500 ml-2"
+  >
+    <Trash2 className="w-4 h-4" />
+  </button>
+</div>
+
+    ))}
+</CommandList>
+
+    </Command>
+  </PopoverContent>
+</Popover>
+{form.formState.errors.name && (
+  <p className="text-red-500 text-sm mt-1">{form.formState.errors.name.message}</p>
+)}
+
+
   </div>
+
 
   <div>
     <label className="text-sm font-medium">Dosage</label>
-    <Input placeholder="e.g., 1 tablet, 10mg" {...form.register("dosage")} required />
+    <Input placeholder="e.g., 1 tablet, 10mg" {...form.register("dosage", { required: "Dosage is required" })} />
+    {form.formState.errors.dosage && (
+      <p className="text-red-500 text-sm mt-1">{form.formState.errors.dosage.message}</p>
+    )}
   </div>
 
   <div>
@@ -290,19 +431,24 @@ const CaretakerDashboard = () => {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {medications.map(med => (
-                    <div key={med.id} className="border rounded-lg p-3 flex justify-between items-center">
-                      <div>
-                        <div className="font-semibold">{med.name}</div>
-                        <div className="text-sm text-muted-foreground">{med.dosage} • {med.frequency}</div>
-                      </div>
+  <div
+    key={med.id}
+    className="border rounded-lg p-3 flex justify-between items-center cursor-pointer hover:bg-accent transition"
+    onClick={() => setViewingMedication(med)}
+  >
+    <div>
+      <div className="font-semibold">{med.name}</div>
+      <div className="text-sm text-muted-foreground">{med.dosage} • {med.frequency}</div>
+    </div>
+
                       <div className="flex gap-2">
-                        <Button size="sm" variant="ghost" onClick={() => setViewingMedication(med)}>
+                        <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setViewingMedication(med); }}>
                           <Eye className="w-4 h-4" />
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => { setEditingMedication(med); setDialogOpen(true); form.reset(med); }}>
+                        <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setEditingMedication(med); setDialogOpen(true); form.reset(med); }}>
                           <Pencil className="w-4 h-4" />
                         </Button>
-                        <Button size="sm" variant="destructive" onClick={() => handleDelete(med.id)}>
+                        <Button size="sm" variant="destructive" onClick={(e) => { e.stopPropagation(); handleDelete(med.id); }}>
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
@@ -374,8 +520,12 @@ const CaretakerDashboard = () => {
         <Dialog open={!!viewingMedication} onOpenChange={() => setViewingMedication(null)}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Logs for: {viewingMedication.name}</DialogTitle>
-            </DialogHeader>
+  <DialogTitle>Logs for: {viewingMedication.name}</DialogTitle>
+  <DialogDescription>
+    Below are the logs submitted by the patient, including date and optional image proof.
+  </DialogDescription>
+</DialogHeader>
+
             <div className="space-y-3 max-h-80 overflow-y-auto">
               {viewingMedication.medication_logs.length === 0 && (
                 <p className="text-muted-foreground text-sm">No logs available.</p>
