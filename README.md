@@ -5,6 +5,16 @@ Supports **patients** and **caretakers** with real-time data, adherence tracking
 
 ---
 
+## 🔗 Live Demo
+
+🌐 **Deployed on Vercel:**  
+👉 [https://med-buddy-check.vercel.app](https://med-buddy-check.vercel.app)
+
+📂 **GitHub Repository:**  
+👉 [https://github.com/Prakash-734/med-buddy-check](https://github.com/Prakash-734/med-buddy-check)
+
+---
+
 ## 🚀 Features
 
 ### ✅ Authentication
@@ -33,7 +43,15 @@ Supports **patients** and **caretakers** with real-time data, adherence tracking
 - ⚛️ React + TypeScript
 - 🔥 Supabase (Auth, Database, Storage)
 - ⚙️ React Query (data fetching + optimistic updates)
-- 💅 TailwindCSS (UI styles)
-- 🧪 Vitest (unit tests)
+- 💅 TailwindCSS (UI components & styling)
+- 🧪 Vitest (unit testing)
+- 🚀 Vercel (deployment)
 
 ---
+
+## 🧪 Tests
+
+Run tests with:
+
+```bash
+npx vitest run
